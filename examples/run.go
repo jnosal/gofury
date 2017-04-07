@@ -3,21 +3,17 @@ package main
 import (
 	"fury"
 	"net/url"
+	"net/http"
 )
 
 type TestResource struct {
-    fury.DeleteNotSupported
-    fury.HeadNotSupported
-    fury.PatchNotSupported
-    fury.PostNotSupported
-    fury.PutNotSupported
-fury.TraceNotSupported
+	fury.GetSupported
 
 }
 
-func (TestResource) Get(values url.Values) (int, interface{}) {
+func (TestResource) Get(values url.Values, headers http.Header) (int, interface{}, http.Header) {
     data := map[string]string{"hello": "world"}
-    return 200, data
+    return 200, data, http.Header{"Content-type": {"application/json"}}
 }
 
 

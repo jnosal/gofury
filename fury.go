@@ -17,52 +17,33 @@ const (
 	TRACE  = "TRACE"
 )
 
-type Resource interface {
-	Delete(values url.Values) (int, interface{})
-	Get(values url.Values) (int, interface{})
-	Head(values url.Values) (int, interface{})
-	Patch(values url.Values) (int, interface{})
-	Post(values url.Values) (int, interface{})
-	Put(values url.Values) (int, interface{})
-	Trace(values url.Values) (int, interface{})
+
+type DeleteSupported interface {
+	Delete(url.Values, http.Header) (int, interface{}, http.Header)
 }
 
-type (
-	DeleteNotSupported struct{}
-	GetNotSupported    struct{}
-	HeadNotSupported   struct{}
-	PatchNotSupported  struct{}
-	PostNotSupported   struct{}
-	PutNotSupported    struct{}
-	TraceNotSupported  struct{}
-)
-
-func (DeleteNotSupported) Delete(values url.Values) (int, interface{}) {
-	return 405, ""
+type GetSupported interface {
+	Get(url.Values, http.Header) (int, interface{}, http.Header)
 }
 
-func (GetNotSupported) Get(values url.Values) (int, interface{}) {
-	return 405, ""
+type HeadSupported interface {
+	Head(url.Values, http.Header) (int, interface{}, http.Header)
 }
 
-func (HeadNotSupported) Head(values url.Values) (int, interface{}) {
-	return 405, ""
+type PatchSupported interface {
+	Patch(url.Values, http.Header) (int, interface{}, http.Header)
 }
 
-func (PatchNotSupported) Patch(values url.Values) (int, interface{}) {
-	return 405, ""
+type PostSupported interface {
+	Post(url.Values, http.Header) (int, interface{}, http.Header)
 }
 
-func (PostNotSupported) Post(values url.Values) (int, interface{}) {
-	return 405, ""
+type PutSupported interface {
+	Put(url.Values, http.Header) (int, interface{}, http.Header)
 }
 
-func (PutNotSupported) Put(values url.Values) (int, interface{}) {
-	return 405, ""
-}
-
-func (TraceNotSupported) Trace(values url.Values) (int, interface{}) {
-	return 405, ""
+type TraceSupported interface {
+	Trace(url.Values, http.Header) (int, interface{}, http.Header)
 }
 
 type Fury struct {
@@ -73,52 +54,78 @@ func (fury *Fury) Abort(rw http.ResponseWriter, statusCode int) {
 	rw.WriteHeader(statusCode)
 }
 
-func (fury *Fury) requestHandler(resource Resource) http.HandlerFunc {
+func (fury *Fury) requestHandler(resource interface{}) http.HandlerFunc {
 	return func(rw http.ResponseWriter, request *http.Request) {
 
-		var data interface{}
-		var code int
-
-		request.ParseForm()
-		method := request.Method
-		values := request.Form
-
-		switch method {
-		case DELETE:
-			code, data = resource.Delete(values)
-		case GET:
-			code, data = resource.Get(values)
-		case HEAD:
-			code, data = resource.Head(values)
-		case PATCH:
-			code, data = resource.Patch(values)
-		case POST:
-			code, data = resource.Post(values)
-		case PUT:
-			code, data = resource.Put(values)
-		case TRACE:
-			code, data = resource.Trace(values)
-		default:
-			fury.Abort(rw, 405)
+		if request.ParseForm() != nil {
+			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		content, err := json.Marshal(data)
+		var handler func(url.Values, http.Header) (int, interface{}, http.Header)
+
+		switch request.Method {
+		case DELETE:
+			if resource, ok := resource.(DeleteSupported); ok {
+				handler = resource.Delete
+			}
+		case GET:
+			if resource, ok := resource.(GetSupported); ok {
+				handler = resource.Get
+			}
+		case HEAD:
+			if resource, ok := resource.(HeadSupported); ok {
+				handler = resource.Head
+			}
+		case POST:
+			if resource, ok := resource.(PostSupported); ok {
+				handler = resource.Post
+			}
+		case PUT:
+			if resource, ok := resource.(PutSupported); ok {
+				handler = resource.Put
+			}
+		case PATCH:
+			if resource, ok := resource.(PatchSupported); ok {
+				handler = resource.Patch
+			}
+		case TRACE:
+			if resource, ok := resource.(TraceSupported); ok {
+				handler = resource.Trace
+			}
+		}
+
+		if handler == nil {
+			rw.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		code, data, header := handler(request.Form, request.Header)
+
+		content, err := json.MarshalIndent(data, "", "  ")
 		if err != nil {
-			fury.Abort(rw, 500)
+			rw.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		for name, values := range header {
+			for _, value := range values {
+				rw.Header().Add(name, value)
+			}
 		}
 		rw.WriteHeader(code)
 		rw.Write(content)
 	}
 }
 
-func (fury *Fury) AddResource(resource Resource, path string) {
-	http.HandleFunc(path, fury.requestHandler(resource))
+func (fury *Fury) AddResource(resource interface{}, paths ...string) {
+	for _, path := range paths {
+		http.HandleFunc(path, fury.requestHandler(resource))
+	}
 }
 
-func (fury *Fury) Start(port int) {
+func (fury *Fury) Start(port int) error {
 	portString := fmt.Sprintf(":%d", port)
-	http.ListenAndServe(portString, nil)
+	return http.ListenAndServe(portString, nil)
 }
 
 func New() (f *Fury) {

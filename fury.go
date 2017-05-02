@@ -8,15 +8,20 @@ import (
 )
 
 const (
-	DELETE = "DELETE"
-	GET    = "GET"
-	HEAD   = "HEAD"
-	PATCH  = "PATCH"
-	POST   = "POST"
-	PUT    = "PUT"
-	TRACE  = "TRACE"
+	CONNECT = "CONNECT"
+	DELETE  = "DELETE"
+	GET     = "GET"
+	HEAD    = "HEAD"
+	OPTIONS = "OPTIONS"
+	PATCH   = "PATCH"
+	POST    = "POST"
+	PUT     = "PUT"
+	TRACE   = "TRACE"
 )
 
+type ConnectSupported interface {
+	Connect(url.Values, http.Header) (int, interface{}, http.Header)
+}
 
 type DeleteSupported interface {
 	Delete(url.Values, http.Header) (int, interface{}, http.Header)
@@ -28,6 +33,10 @@ type GetSupported interface {
 
 type HeadSupported interface {
 	Head(url.Values, http.Header) (int, interface{}, http.Header)
+}
+
+type OptionsSupported interface {
+	Options(url.Values, http.Header) (int, interface{}, http.Header)
 }
 
 type PatchSupported interface {
@@ -47,7 +56,25 @@ type TraceSupported interface {
 }
 
 type Fury struct {
-	Name string
+	port       int
+	host       string
+	middleware []string
+}
+
+func (fury *Fury) Route(path string, resource interface{}) *Fury {
+	http.HandleFunc(path, fury.requestHandler(resource))
+	return fury
+}
+
+func (fury *Fury) Use(middleware ...string) *Fury {
+	fury.middleware = append(fury.middleware, middleware...)
+	return fury
+}
+
+func (fury *Fury) Start() error {
+	address := fmt.Sprintf("%s:%d", fury.host, fury.port)
+	fmt.Printf("STARTING FURY at %s", address)
+	return http.ListenAndServe(address, nil)
 }
 
 func (fury *Fury) Abort(rw http.ResponseWriter, statusCode int) {
@@ -65,6 +92,10 @@ func (fury *Fury) requestHandler(resource interface{}) http.HandlerFunc {
 		var handler func(url.Values, http.Header) (int, interface{}, http.Header)
 
 		switch request.Method {
+		case CONNECT:
+			if resource, ok := resource.(ConnectSupported); ok {
+				handler = resource.Connect
+			}
 		case DELETE:
 			if resource, ok := resource.(DeleteSupported); ok {
 				handler = resource.Delete
@@ -76,6 +107,10 @@ func (fury *Fury) requestHandler(resource interface{}) http.HandlerFunc {
 		case HEAD:
 			if resource, ok := resource.(HeadSupported); ok {
 				handler = resource.Head
+			}
+		case OPTIONS:
+			if resource, ok := resource.(OptionsSupported); ok {
+				handler = resource.Options
 			}
 		case POST:
 			if resource, ok := resource.(PostSupported); ok {
@@ -117,20 +152,6 @@ func (fury *Fury) requestHandler(resource interface{}) http.HandlerFunc {
 	}
 }
 
-func (fury *Fury) AddResource(resource interface{}, paths ...string) {
-	for _, path := range paths {
-		http.HandleFunc(path, fury.requestHandler(resource))
-	}
-}
-
-func (fury *Fury) Start(port int) error {
-	portString := fmt.Sprintf(":%d", port)
-	return http.ListenAndServe(portString, nil)
-}
-
-func New() (f *Fury) {
-	f = &Fury{
-		Name: "Hello Fury!!!",
-	}
-	return
+func New(host string, port int) *Fury {
+	return &Fury{host: host, port: port}
 }

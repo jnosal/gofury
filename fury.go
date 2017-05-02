@@ -3,6 +3,7 @@ package fury
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 )
@@ -73,7 +74,7 @@ func (fury *Fury) Use(middleware ...string) *Fury {
 
 func (fury *Fury) Start() error {
 	address := fmt.Sprintf("%s:%d", fury.host, fury.port)
-	fmt.Printf("STARTING FURY at %s", address)
+	log.Printf("STARTING FURY at %s", address)
 	return http.ListenAndServe(address, nil)
 }
 

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"time"
 )
 
 const (
@@ -150,10 +151,16 @@ func (fury *Fury) UsePost(middleware ...string) *Fury {
 	return fury
 }
 
-func (fury *Fury) Start() error {
+func (fury *Fury) Start() {
 	address := fmt.Sprintf("%s:%d", fury.host, fury.port)
 	log.Printf("STARTING FURY at %s", address)
-	return http.ListenAndServe(address, nil)
+	server := &http.Server{
+		Addr:           address,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+	log.Fatal(server.ListenAndServe())
 }
 
 func (fury *Fury) Abort(rw http.ResponseWriter, statusCode int) {

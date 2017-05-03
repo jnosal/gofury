@@ -2,6 +2,7 @@ package fury
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"log"
 	"net/http"
@@ -26,13 +27,15 @@ const (
 
 const (
 	CONTENT_TYPE_JSON = "application/json"
+	CONTENT_TYPE_XML  = "application/xml"
 )
 
 type Renderer interface {
-	Render(code int, name string, data interface{}) error
-	Html(code int, html string) error
-	String(code int, s string) error
-	Json(code int, data interface{}) error
+	Render(code int, name string, data interface{})
+	Html(code int, html string)
+	String(code int, s string)
+	Json(code int, data interface{})
+	Xml(code int, data interface{})
 	SetContentType(name string)
 	WriteWithCode(code int, data []byte)
 }
@@ -43,7 +46,7 @@ type Meta struct {
 	path    string
 	query   url.Values
 	headers http.Header
-	fury *Fury
+	fury    *Fury
 }
 
 func (meta *Meta) SetContentType(name string) {
@@ -64,17 +67,28 @@ func (meta *Meta) Html(code int, html string) {
 }
 
 func (meta *Meta) String(code int, s string) {
-	return
+	meta.WriteWithCode(code, []byte(s))
 }
 
 func (meta *Meta) Json(code int, data interface{}) {
 	content, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		meta.writer.WriteHeader(http.StatusInternalServerError)
+		http.Error(meta.writer, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	meta.SetContentType(CONTENT_TYPE_JSON)
+	meta.WriteWithCode(code, content)
+}
+
+func (meta *Meta) Xml(code int, data interface{}) {
+	content, err := xml.MarshalIndent(data, "", "  ")
+	if err != nil {
+		http.Error(meta.writer, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	meta.SetContentType(CONTENT_TYPE_XML)
 	meta.WriteWithCode(code, content)
 }
 

@@ -2,17 +2,15 @@ package main
 
 import (
 	"fury"
-	"net/http"
-	"net/url"
 )
 
 type TestResource struct {
-	fury.GetSupported
+	fury.GetMixin
 }
 
-func (TestResource) Get(values url.Values, headers http.Header) (int, interface{}, http.Header) {
+func (TestResource) Get(meta *fury.Meta) {
 	data := map[string]string{"hello": "world"}
-	return 200, data, http.Header{"Content-type": {"application/json"}}
+	meta.Json(200, data)
 }
 
 func main() {

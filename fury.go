@@ -20,46 +20,104 @@ const (
 	TRACE   = "TRACE"
 )
 
-type ConnectSupported interface {
-	Connect(url.Values, http.Header) (int, interface{}, http.Header)
+const (
+	HEADER_CONTENT_TYPE = "Content-Type"
+)
+
+const (
+	CONTENT_TYPE_JSON = "application/json"
+)
+
+type Renderer interface {
+	Render(code int, name string, data interface{}) error
+	Html(code int, html string) error
+	String(code int, s string) error
+	Json(code int, data interface{}) error
+	SetContentType(name string)
+	WriteWithCode(code int, data []byte)
 }
 
-type DeleteSupported interface {
-	Delete(url.Values, http.Header) (int, interface{}, http.Header)
+type Meta struct {
+	writer  http.ResponseWriter
+	request *http.Request
+	path    string
+	query   url.Values
+	headers http.Header
 }
 
-type GetSupported interface {
-	Get(url.Values, http.Header) (int, interface{}, http.Header)
+func (meta *Meta) SetContentType(name string) {
+	meta.writer.Header().Add(HEADER_CONTENT_TYPE, name)
 }
 
-type HeadSupported interface {
-	Head(url.Values, http.Header) (int, interface{}, http.Header)
+func (meta *Meta) WriteWithCode(code int, data []byte) {
+	meta.writer.WriteHeader(code)
+	meta.writer.Write(data)
 }
 
-type OptionsSupported interface {
-	Options(url.Values, http.Header) (int, interface{}, http.Header)
+func (meta *Meta) Render(code int, name string, data interface{}) {
+	return
 }
 
-type PatchSupported interface {
-	Patch(url.Values, http.Header) (int, interface{}, http.Header)
+func (meta *Meta) Html(code int, html string) {
+	return
 }
 
-type PostSupported interface {
-	Post(url.Values, http.Header) (int, interface{}, http.Header)
+func (meta *Meta) String(code int, s string) {
+	return
 }
 
-type PutSupported interface {
-	Put(url.Values, http.Header) (int, interface{}, http.Header)
+func (meta *Meta) Json(code int, data interface{}) {
+	content, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		meta.writer.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	meta.SetContentType(CONTENT_TYPE_JSON)
+	meta.WriteWithCode(code, content)
 }
 
-type TraceSupported interface {
-	Trace(url.Values, http.Header) (int, interface{}, http.Header)
+type ConnectMixin interface {
+	Connect(meta *Meta)
+}
+
+type DeleteMixin interface {
+	Delete(meta *Meta)
+}
+
+type GetMixin interface {
+	Get(meta *Meta)
+}
+
+type HeadMixin interface {
+	Head(meta *Meta)
+}
+
+type OptionsMixin interface {
+	Options(meta *Meta)
+}
+
+type PatchMixin interface {
+	Patch(meta *Meta)
+}
+
+type PostMixin interface {
+	Post(meta *Meta)
+}
+
+type PutMixin interface {
+	Put(meta *Meta)
+}
+
+type TraceMixin interface {
+	Trace(meta *Meta)
 }
 
 type Fury struct {
-	port       int
-	host       string
-	middleware []string
+	port           int
+	host           string
+	preMiddleware  []string
+	postMiddleware []string
 }
 
 func (fury *Fury) Route(path string, resource interface{}) *Fury {
@@ -67,8 +125,13 @@ func (fury *Fury) Route(path string, resource interface{}) *Fury {
 	return fury
 }
 
-func (fury *Fury) Use(middleware ...string) *Fury {
-	fury.middleware = append(fury.middleware, middleware...)
+func (fury *Fury) UsePre(middleware ...string) *Fury {
+	fury.preMiddleware = append(fury.preMiddleware, middleware...)
+	return fury
+}
+
+func (fury *Fury) UsePost(middleware ...string) *Fury {
+	fury.postMiddleware = append(fury.postMiddleware, middleware...)
 	return fury
 }
 
@@ -90,43 +153,43 @@ func (fury *Fury) requestHandler(resource interface{}) http.HandlerFunc {
 			return
 		}
 
-		var handler func(url.Values, http.Header) (int, interface{}, http.Header)
+		var handler func(m *Meta)
 
 		switch request.Method {
 		case CONNECT:
-			if resource, ok := resource.(ConnectSupported); ok {
+			if resource, ok := resource.(ConnectMixin); ok {
 				handler = resource.Connect
 			}
 		case DELETE:
-			if resource, ok := resource.(DeleteSupported); ok {
+			if resource, ok := resource.(DeleteMixin); ok {
 				handler = resource.Delete
 			}
 		case GET:
-			if resource, ok := resource.(GetSupported); ok {
+			if resource, ok := resource.(GetMixin); ok {
 				handler = resource.Get
 			}
 		case HEAD:
-			if resource, ok := resource.(HeadSupported); ok {
+			if resource, ok := resource.(HeadMixin); ok {
 				handler = resource.Head
 			}
 		case OPTIONS:
-			if resource, ok := resource.(OptionsSupported); ok {
+			if resource, ok := resource.(OptionsMixin); ok {
 				handler = resource.Options
 			}
 		case POST:
-			if resource, ok := resource.(PostSupported); ok {
+			if resource, ok := resource.(PostMixin); ok {
 				handler = resource.Post
 			}
 		case PUT:
-			if resource, ok := resource.(PutSupported); ok {
+			if resource, ok := resource.(PutMixin); ok {
 				handler = resource.Put
 			}
 		case PATCH:
-			if resource, ok := resource.(PatchSupported); ok {
+			if resource, ok := resource.(PatchMixin); ok {
 				handler = resource.Patch
 			}
 		case TRACE:
-			if resource, ok := resource.(TraceSupported); ok {
+			if resource, ok := resource.(TraceMixin); ok {
 				handler = resource.Trace
 			}
 		}
@@ -136,20 +199,8 @@ func (fury *Fury) requestHandler(resource interface{}) http.HandlerFunc {
 			return
 		}
 
-		code, data, header := handler(request.Form, request.Header)
-
-		content, err := json.MarshalIndent(data, "", "  ")
-		if err != nil {
-			rw.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		for name, values := range header {
-			for _, value := range values {
-				rw.Header().Add(name, value)
-			}
-		}
-		rw.WriteHeader(code)
-		rw.Write(content)
+		var meta = &Meta{writer: rw, request: request, query: request.Form, headers: request.Header}
+		handler(meta)
 	}
 }
 

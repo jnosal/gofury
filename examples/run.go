@@ -2,6 +2,7 @@ package main
 
 import (
 	"fury"
+	"net/http"
 )
 
 type JsonResource struct {
@@ -10,7 +11,7 @@ type JsonResource struct {
 
 func (JsonResource) Get(meta *fury.Meta) {
 	data := map[string]string{"hello": "world"}
-	meta.Json(200, data)
+	meta.Json(http.StatusOK, data)
 }
 
 type StringResource struct {
@@ -18,7 +19,7 @@ type StringResource struct {
 }
 
 func (StringResource) Get(meta *fury.Meta) {
-	meta.String(200, "test")
+	meta.String(http.StatusOK, "test")
 }
 
 func main() {

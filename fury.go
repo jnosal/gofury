@@ -43,6 +43,7 @@ type Meta struct {
 	path    string
 	query   url.Values
 	headers http.Header
+	fury *Fury
 }
 
 func (meta *Meta) SetContentType(name string) {
@@ -199,7 +200,7 @@ func (fury *Fury) requestHandler(resource interface{}) http.HandlerFunc {
 			return
 		}
 
-		var meta = &Meta{writer: rw, request: request, query: request.Form, headers: request.Header}
+		var meta = &Meta{writer: rw, request: request, query: request.Form, headers: request.Header, fury: fury}
 		handler(meta)
 	}
 }

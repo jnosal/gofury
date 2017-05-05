@@ -46,8 +46,15 @@ type Meta struct {
 	request *http.Request
 	path    string
 	query   url.Values
-	headers http.Header
 	fury    *Fury
+}
+
+func (m *Meta) RequestHeaders() http.Header {
+	return m.request.Header
+}
+
+func (m *Meta) Request() *http.Request {
+	return m.request
 }
 
 func (meta *Meta) SetContentType(name string) {
@@ -221,7 +228,7 @@ func (fury *Fury) requestHandler(resource interface{}) http.HandlerFunc {
 			return
 		}
 
-		var meta = &Meta{writer: rw, request: request, query: request.Form, headers: request.Header, fury: fury}
+		var meta = &Meta{writer: rw, request: request, query: request.Form, fury: fury}
 		handler(meta)
 	}
 }

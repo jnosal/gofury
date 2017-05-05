@@ -2,6 +2,7 @@ package main
 
 import (
 	"fury"
+	"log"
 	"net/http"
 )
 
@@ -25,12 +26,14 @@ func (StringResource) Get(meta *fury.Meta) {
 type DetailResource struct {
 }
 
-func (d *DetailResource) Get(meta *fury.Meta) {
-	fury.RetrieveResource(d, meta)
+func (resource *DetailResource) Get(meta *fury.Meta) {
+	log.Println(meta.RequestHeaders())
+	fury.RetrieveResource(resource, meta)
 }
 
-func (g *DetailResource) Retrieve() string {
-	return "DDDCC!!!!!!!!1321312333333444"
+func (resource *DetailResource) Retrieve() (s string, err error) {
+	s = "DDDCC!!!!!!!!1321312333333444"
+	return
 }
 
 func main() {

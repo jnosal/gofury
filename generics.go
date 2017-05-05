@@ -2,36 +2,73 @@ package fury
 
 import "net/http"
 
-type Retrievable interface {
-	Retrieve() string
+type IRetrieve interface {
+	Retrieve() (s string, err error)
 }
 
-type Creatable interface {
-	Create()
+type ICreate interface {
+	Create() (err error)
 }
 
-type Listable interface {
-	List()
+type IList interface {
+	List() (err error)
 }
 
-type Removable interface {
-	Remove()
+type IDestroy interface {
+	Remove() (err error)
 }
 
-func RetrieveResource(retriever Retrievable, meta *Meta) {
-	result := retriever.Retrieve()
+type IUpdate interface {
+	Update() (err error)
+}
+
+type IModify interface {
+	Modify() (err error)
+}
+
+type IListCreate interface {
+	IList
+	ICreate
+}
+
+type IModifyUpdate interface {
+	IModify
+	IUpdate
+}
+
+type IRetrieveUpdate interface {
+	IRetrieve
+	IModify
+	IUpdate
+}
+
+type IDetailDestroy interface {
+	IRetrieve
+	IDestroy
+}
+
+func RetrieveResource(i IRetrieve, meta *Meta) {
+	result, _ := i.Retrieve()
 	data := map[string]string{"result": result}
 	meta.Json(http.StatusOK, data)
 }
 
-func CreateResource(creator Creatable, meta *Meta) {
+func CreateResource(i ICreate, meta *Meta) {
 
 }
 
-func ListResource(lister Listable, meta *Meta) {
+func ListResource(i IList, meta *Meta) {
 
 }
 
-func DeleteResource(remover Removable, meta *Meta) {
+func RemoveResource(i IDestroy, meta *Meta) {
+
+}
+
+func UpdateResource(i IUpdate, meta *Meta) {
+
+}
+
+func ModifyResource(i IUpdate, meta *Meta) {
 
 }

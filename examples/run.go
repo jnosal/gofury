@@ -22,10 +22,8 @@ func (StringResource) Get(meta *fury.Meta) {
 	meta.String(http.StatusOK, "test")
 }
 
-
 type DetailResource struct {
 }
-
 
 func (d *DetailResource) Get(meta *fury.Meta) {
 	fury.RetrieveResource(d, meta)
@@ -34,7 +32,6 @@ func (d *DetailResource) Get(meta *fury.Meta) {
 func (g *DetailResource) Retrieve() string {
 	return "DDDCC!!!!!!!!1321312333333444"
 }
-
 
 func main() {
 	f := fury.New("localhost", 3000)

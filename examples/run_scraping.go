@@ -1,11 +1,19 @@
 package main
 
+import (
+	"fury/scraping"
+	"log"
+)
 
-import "fury/scraping"
 
+func CrawledHandler(proxy scraping.ScrapingResultProxy) {
+	log.Println("EXECUTING HANDLER HUEHUEHUEHUEHUEH")
+}
 
 func main() {
-	runner := scraping.NewRunner()
-	runner.PushScraper(scraping.NewScraper("golangweekly.com", "http://golangweekly.com"))
+	runner := scraping.NewRunner(CrawledHandler)
+	scraper := scraping.NewScraper("http://golangweekly.com")
+
+	runner.PushScraper(scraper)
 	runner.Run()
 }

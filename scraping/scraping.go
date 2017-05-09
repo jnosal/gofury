@@ -6,13 +6,13 @@ import (
 	"io"
 	"log"
 	"net/http"
+	URL "net/url"
 	"strings"
 	"sync"
 )
 
 const HREF = "href"
-const LIMIT_CRAWL = 10
-const LIMIT_FAIL = 1
+
 
 func GetHref(t html.Token) (ok bool, href string) {
 	for _, a := range t.Attr {
@@ -60,18 +60,31 @@ func (extractor *LinkExtractor) Extract(r io.ReadCloser, callback func(string)) 
 	}
 }
 
+type ScrapingResultProxy struct {
+	resp    http.Response
+	scraper Scraper
+}
+
+func (proxy ScrapingResultProxy) String() (result string) {
+	result = "Twoja stara"
+	return
+}
+
 type Runnable interface {
 	Run() (err error)
 }
 
 type DefaultRunner struct {
-	finished    int
-	scrapers    []*Scraper
-	chDone      chan *Scraper
-	chFoundUrls chan string
+	limitCrawl int
+	limitFail int
+	handler func(ScrapingResultProxy)
+	finished  int
+	scrapers  []*Scraper
+	chDone    chan *Scraper
+	chScraped chan ScrapingResultProxy
 }
 
-func (runner *DefaultRunner) FinishedIncr() {
+func (runner *DefaultRunner) IncrFinishedCounter() {
 	runner.finished += 1
 }
 
@@ -90,13 +103,14 @@ func (runner *DefaultRunner) Run() {
 	// main scraping loop
 	for {
 		select {
-		case _, ok := <-runner.chFoundUrls:
+		case proxy, ok := <-runner.chScraped:
 			if !ok {
 				break
 			}
+			runner.handler(proxy)
 		case scraper, ok := <-runner.chDone:
 			log.Printf("%s is done.", scraper)
-			runner.FinishedIncr()
+			runner.IncrFinishedCounter()
 			if !ok {
 				break
 			}
@@ -110,7 +124,7 @@ func (runner *DefaultRunner) Run() {
 
 func (runner *DefaultRunner) Close() {
 	close(runner.chDone)
-	close(runner.chFoundUrls)
+	close(runner.chScraped)
 }
 
 func (runner *DefaultRunner) PushScraper(scrapers ...*Scraper) *DefaultRunner {
@@ -122,23 +136,22 @@ func (runner *DefaultRunner) PushScraper(scrapers ...*Scraper) *DefaultRunner {
 }
 
 type Scraper struct {
-	crawled int
-	successful int
-	failed int
-	fetchMutex  *sync.Mutex
+	crawled      int
+	successful   int
+	failed       int
+	fetchMutex   *sync.Mutex
 	crawledMutex *sync.Mutex
-	domain      string
-	baseUrl     string
-	fetchedUrls map[string]bool
-	runner      *DefaultRunner
-	extractor   *LinkExtractor
+	domain       string
+	baseUrl      string
+	fetchedUrls  map[string]bool
+	runner       *DefaultRunner
+	extractor    *LinkExtractor
 }
-
 
 func (scraper *Scraper) IncrCounters(isSuccessful bool) {
 	scraper.crawledMutex.Lock()
 	scraper.crawled += 1
-	if (isSuccessful) {
+	if isSuccessful {
 		scraper.successful += 1
 	} else {
 		scraper.failed += 1
@@ -146,20 +159,18 @@ func (scraper *Scraper) IncrCounters(isSuccessful bool) {
 	scraper.crawledMutex.Unlock()
 }
 
-
 func (scraper *Scraper) MarkAsFetched(url string) {
 	scraper.fetchMutex.Lock()
 	scraper.fetchedUrls[url] = true
 	scraper.fetchMutex.Unlock()
 }
 
-
 func (scraper *Scraper) CheckIfShouldStop() (ok bool) {
 	scraper.crawledMutex.Lock()
-	if scraper.crawled == LIMIT_CRAWL {
+	if scraper.crawled == scraper.runner.limitCrawl {
 		log.Printf("Crawl limit exceeded: %s", scraper)
 		ok = true
-	} else if scraper.failed == LIMIT_FAIL {
+	} else if scraper.failed == scraper.runner.limitFail {
 		log.Printf("Fail limit exceeeded: %s", scraper)
 		ok = true
 	}
@@ -185,13 +196,12 @@ func (scraper *Scraper) CheckUrl(sourceUrl string) (ok bool, url string) {
 	return
 }
 
-
 func (scraper *Scraper) RunExtractor(resp *http.Response) {
 	scraper.extractor.Extract(resp.Body, func(url string) {
 		ok, url := scraper.CheckUrl(url)
 
 		if ok {
-			go scraper.Fetch(url, true)
+			scraper.Fetch(url, true)
 		}
 
 		if scraper.CheckIfShouldStop() {
@@ -200,14 +210,12 @@ func (scraper *Scraper) RunExtractor(resp *http.Response) {
 	})
 }
 
-
 func (scraper *Scraper) Stop() {
 	scraper.runner.chDone <- scraper
 }
 
-
 func (scraper *Scraper) Start(baseUrl string) {
-	resp, err :=  scraper.Fetch(baseUrl, false)
+	resp, err := scraper.Fetch(baseUrl, false)
 
 	if err != nil {
 		log.Printf("Base url is corrupted stopping %s", scraper)
@@ -220,6 +228,9 @@ func (scraper *Scraper) Start(baseUrl string) {
 	return
 }
 
+func (scraper *Scraper) Notify(resp *http.Response) {
+	scraper.runner.chScraped <- NewResultProxy(*scraper, *resp)
+}
 
 func (scraper *Scraper) Fetch(url string, extract bool) (resp *http.Response, err error) {
 	if ok := scraper.CheckIfFetched(url); ok {
@@ -227,7 +238,7 @@ func (scraper *Scraper) Fetch(url string, extract bool) (resp *http.Response, er
 	}
 	scraper.MarkAsFetched(url)
 
-	log.Printf("Fetching: %s", url)
+	log.Printf("FETCHING: %s", url)
 	resp, err = http.Get(url)
 
 	scraper.IncrCounters(err == nil)
@@ -240,34 +251,49 @@ func (scraper *Scraper) Fetch(url string, extract bool) (resp *http.Response, er
 		scraper.RunExtractor(resp)
 	}
 
+	scraper.Notify(resp)
 	return
 }
 
 func (scraper *Scraper) String() (result string) {
-	result = fmt.Sprintf("<Scraper: %s>. Crawled: %d, successful: %d failed: %d.", scraper.domain, scraper.crawled, scraper.successful, scraper.failed)
+	result = fmt.Sprintf("<Scraper: %s>. Crawled: %d, successful: %d failed: %d.",
+		scraper.domain, scraper.crawled, scraper.successful, scraper.failed)
 	return
 }
 
-func NewRunner() (r *DefaultRunner) {
+func NewRunner(handler func(ScrapingResultProxy)) (r *DefaultRunner) {
 	r = &DefaultRunner{
-		finished:    0,
-		chDone:      make(chan *Scraper),
-		chFoundUrls: make(chan string),
+		limitCrawl: 1000,
+		limitFail: 50,
+		handler: handler,
+		finished:  0,
+		chDone:    make(chan *Scraper),
+		chScraped: make(chan ScrapingResultProxy),
 	}
 	return
 }
 
-func NewScraper(domain string, url string) (s *Scraper) {
-	s = &Scraper{
-		crawled: 0,
-		successful: 0,
-		failed: 0,
-		domain:      domain,
-		baseUrl:     url,
-		fetchedUrls: make(map[string]bool),
-		crawledMutex: &sync.Mutex{},
-		fetchMutex:  &sync.Mutex{},
-		extractor:   &LinkExtractor{},
+func NewScraper(sourceUrl string) (s *Scraper) {
+	parsed, err := URL.Parse(sourceUrl)
+	if err != nil {
+		log.Printf("ERROR inappropriate URL: %s", sourceUrl)
+		return
 	}
+	s = &Scraper{
+		crawled:      0,
+		successful:   0,
+		failed:       0,
+		domain:       parsed.Host,
+		baseUrl:      sourceUrl,
+		fetchedUrls:  make(map[string]bool),
+		crawledMutex: &sync.Mutex{},
+		fetchMutex:   &sync.Mutex{},
+		extractor:    &LinkExtractor{},
+	}
+	return
+}
+
+func NewResultProxy(scraper Scraper, resp http.Response) (result ScrapingResultProxy) {
+	result = ScrapingResultProxy{scraper: scraper, resp: resp}
 	return
 }

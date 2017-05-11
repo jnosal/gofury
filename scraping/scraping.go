@@ -1,8 +1,8 @@
 package scraping
 
 import (
-	"fury"
 	"fmt"
+	"fury"
 	"golang.org/x/net/html"
 	"io"
 	"net/http"
@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 )
-
 
 func GetHref(t html.Token) (ok bool, href string) {
 	for _, a := range t.Attr {
@@ -75,12 +74,17 @@ type Runnable interface {
 
 type DefaultRunner struct {
 	limitCrawl int
-	limitFail int
-	handler func(ScrapingResultProxy)
-	finished  int
-	scrapers  []*Scraper
-	chDone    chan *Scraper
-	chScraped chan ScrapingResultProxy
+	limitFail  int
+	handler    func(ScrapingResultProxy)
+	finished   int
+	scrapers   []*Scraper
+	chDone     chan *Scraper
+	chScraped  chan ScrapingResultProxy
+}
+
+func (runner *DefaultRunner) SetHandler(handler func(ScrapingResultProxy)) *DefaultRunner {
+	runner.handler = handler
+	return runner
 }
 
 func (runner *DefaultRunner) IncrFinishedCounter() {
@@ -105,7 +109,13 @@ func (runner *DefaultRunner) Run() {
 			if !ok {
 				break
 			}
-			runner.handler(proxy)
+			if runner.handler != nil {
+				runner.handler(proxy)
+			}
+			if proxy.scraper.handler != nil {
+				proxy.scraper.handler(proxy)
+			}
+
 		case scraper, ok := <-runner.chDone:
 			fury.Logger().Infof("Stopped %s", scraper)
 			runner.IncrFinishedCounter()
@@ -137,6 +147,7 @@ type Scraper struct {
 	crawled      int
 	successful   int
 	failed       int
+	handler    func(ScrapingResultProxy)
 	fetchMutex   *sync.Mutex
 	crawledMutex *sync.Mutex
 	domain       string
@@ -260,20 +271,25 @@ func (scraper *Scraper) Fetch(url string, extract bool) (resp *http.Response, er
 	return
 }
 
+
+func (scraper *Scraper) SetHandler(handler func(ScrapingResultProxy)) *Scraper {
+	scraper.handler = handler
+	return scraper
+}
+
 func (scraper *Scraper) String() (result string) {
 	result = fmt.Sprintf("<Scraper: %s>. Crawled: %d, successful: %d failed: %d.",
 		scraper.domain, scraper.crawled, scraper.successful, scraper.failed)
 	return
 }
 
-func NewRunner(handler func(ScrapingResultProxy)) (r *DefaultRunner) {
+func NewRunner() (r *DefaultRunner) {
 	r = &DefaultRunner{
 		limitCrawl: 1000,
-		limitFail: 50,
-		handler: handler,
-		finished:  0,
-		chDone:    make(chan *Scraper),
-		chScraped: make(chan ScrapingResultProxy),
+		limitFail:  50,
+		finished:   0,
+		chDone:     make(chan *Scraper),
+		chScraped:  make(chan ScrapingResultProxy),
 	}
 	return
 }

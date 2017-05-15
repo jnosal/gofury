@@ -5,11 +5,19 @@ import (
 	"fury"
 	"golang.org/x/net/html"
 	"io"
+	"net"
 	"net/http"
 	URL "net/url"
 	"strings"
 	"sync"
 	"time"
+)
+
+
+const (
+	TIMEOUT_DIALER = time.Duration(time.Second * 10)
+	TIMEOUT_REQUEST = time.Duration(time.Second * 10)
+	TIMEOUT_TLS = time.Duration(time.Second * 5)
 )
 
 func GetHref(t html.Token) (ok bool, href string) {
@@ -147,7 +155,7 @@ type Scraper struct {
 	crawled      int
 	successful   int
 	failed       int
-	handler    func(ScrapingResultProxy)
+	handler      func(ScrapingResultProxy)
 	fetchMutex   *sync.Mutex
 	crawledMutex *sync.Mutex
 	domain       string
@@ -253,13 +261,14 @@ func (scraper *Scraper) Fetch(url string, extract bool) (resp *http.Response, er
 	fury.Logger().Infof("Fetching: %s", url)
 	tic := time.Now()
 
-	resp, err = http.Get(url)
+	resp, err = NewHTTPClient().Get(url)
 
 	fury.Logger().Debugf("Request to %s took: %s", url, time.Since(tic))
 
 	scraper.IncrCounters(err == nil)
 	if err != nil {
 		fury.Logger().Warningf("Failed to crawl %s", url)
+		fury.Logger().Debug(err)
 		return
 	}
 
@@ -270,7 +279,6 @@ func (scraper *Scraper) Fetch(url string, extract bool) (resp *http.Response, er
 	scraper.Notify(resp)
 	return
 }
-
 
 func (scraper *Scraper) SetHandler(handler func(ScrapingResultProxy)) *Scraper {
 	scraper.handler = handler
@@ -316,5 +324,18 @@ func NewScraper(sourceUrl string) (s *Scraper) {
 
 func NewResultProxy(scraper Scraper, resp http.Response) (result ScrapingResultProxy) {
 	result = ScrapingResultProxy{scraper: scraper, resp: resp}
+	return
+}
+
+func NewHTTPClient() (client *http.Client) {
+	client = &http.Client{
+		Timeout: TIMEOUT_REQUEST,
+		Transport: &http.Transport{
+			Dial: (&net.Dialer{
+				Timeout: TIMEOUT_DIALER,
+			}).Dial,
+			TLSHandshakeTimeout: TIMEOUT_TLS,
+		},
+	}
 	return
 }

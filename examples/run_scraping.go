@@ -16,9 +16,9 @@ func ScraperHandler(proxy scraping.ScrapingResultProxy) {
 
 
 func main() {
-	runner := scraping.NewRunner().SetHandler(GlobalHandler)
+	engine := scraping.NewEngine().SetHandler(GlobalHandler)
 	scraper := scraping.NewScraper("http://golangweekly.com").SetHandler(ScraperHandler)
 
-	runner.PushScraper(scraper)
-	runner.Run()
+	engine.PushScraper(scraper)
+	engine.Run()
 }

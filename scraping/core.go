@@ -80,7 +80,7 @@ type Runnable interface {
 	Run() (err error)
 }
 
-type DefaultRunner struct {
+type Engine struct {
 	limitCrawl int
 	limitFail  int
 	handler    func(ScrapingResultProxy)
@@ -90,20 +90,20 @@ type DefaultRunner struct {
 	chScraped  chan ScrapingResultProxy
 }
 
-func (runner *DefaultRunner) SetHandler(handler func(ScrapingResultProxy)) *DefaultRunner {
+func (runner *Engine) SetHandler(handler func(ScrapingResultProxy)) *Engine {
 	runner.handler = handler
 	return runner
 }
 
-func (runner *DefaultRunner) IncrFinishedCounter() {
+func (runner *Engine) IncrFinishedCounter() {
 	runner.finished += 1
 }
 
-func (runner DefaultRunner) Done() bool {
+func (runner Engine) Done() bool {
 	return len(runner.scrapers) == runner.finished
 }
 
-func (runner *DefaultRunner) Run() {
+func (runner *Engine) Run() {
 	defer runner.Close()
 
 	for _, scraper := range runner.scrapers {
@@ -137,12 +137,12 @@ func (runner *DefaultRunner) Run() {
 	}
 }
 
-func (runner *DefaultRunner) Close() {
+func (runner *Engine) Close() {
 	close(runner.chDone)
 	close(runner.chScraped)
 }
 
-func (runner *DefaultRunner) PushScraper(scrapers ...*Scraper) *DefaultRunner {
+func (runner *Engine) PushScraper(scrapers ...*Scraper) *Engine {
 	for _, scraper := range scrapers {
 		fury.Logger().Debugf("Attaching new scraper %s", scraper)
 		scraper.runner = runner
@@ -161,7 +161,7 @@ type Scraper struct {
 	domain       string
 	baseUrl      string
 	fetchedUrls  map[string]bool
-	runner       *DefaultRunner
+	runner       *Engine
 	extractor    *LinkExtractor
 }
 
@@ -291,8 +291,8 @@ func (scraper *Scraper) String() (result string) {
 	return
 }
 
-func NewRunner() (r *DefaultRunner) {
-	r = &DefaultRunner{
+func NewEngine() (r *Engine) {
+	r = &Engine{
 		limitCrawl: 1000,
 		limitFail:  50,
 		finished:   0,

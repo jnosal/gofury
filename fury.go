@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -160,14 +159,14 @@ func (fury *Fury) UsePost(middleware ...string) *Fury {
 
 func (fury *Fury) Start() {
 	address := fmt.Sprintf("%s:%d", fury.host, fury.port)
-	log.Printf("STARTING FURY at %s", address)
+	Logger().Infof("STARTING FURY at %s", address)
 	server := &http.Server{
 		Addr:           address,
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
-	log.Fatal(server.ListenAndServe())
+	Logger().Error(server.ListenAndServe())
 }
 
 func (fury *Fury) Abort(rw http.ResponseWriter, statusCode int) {

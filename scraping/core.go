@@ -15,6 +15,7 @@ import (
 
 
 const (
+	REQUEST_LIMIT_MILLISECOND = 100
 	TIMEOUT_DIALER = time.Duration(time.Second * 10)
 	TIMEOUT_REQUEST = time.Duration(time.Second * 10)
 	TIMEOUT_TLS = time.Duration(time.Second * 5)
@@ -90,65 +91,65 @@ type Engine struct {
 	chScraped  chan ScrapingResultProxy
 }
 
-func (runner *Engine) SetHandler(handler func(ScrapingResultProxy)) *Engine {
-	runner.handler = handler
-	return runner
+func (engine *Engine) SetHandler(handler func(ScrapingResultProxy)) *Engine {
+	engine.handler = handler
+	return engine
 }
 
-func (runner *Engine) IncrFinishedCounter() {
-	runner.finished += 1
+func (engine *Engine) IncrFinishedCounter() {
+	engine.finished += 1
 }
 
-func (runner Engine) Done() bool {
-	return len(runner.scrapers) == runner.finished
+func (engine Engine) Done() bool {
+	return len(engine.scrapers) == engine.finished
 }
 
-func (runner *Engine) Run() {
-	defer runner.Close()
+func (engine *Engine) Run() {
+	defer engine.Close()
 
-	for _, scraper := range runner.scrapers {
-		go scraper.Start(scraper.baseUrl)
+	for _, scraper := range engine.scrapers {
+		go scraper.Start()
 	}
 
 	// main scraping loop
 	for {
 		select {
-		case proxy, ok := <-runner.chScraped:
+		case proxy, ok := <-engine.chScraped:
 			if !ok {
 				break
 			}
-			if runner.handler != nil {
-				runner.handler(proxy)
+			if engine.handler != nil {
+				engine.handler(proxy)
 			}
 			if proxy.scraper.handler != nil {
 				proxy.scraper.handler(proxy)
 			}
 
-		case scraper, ok := <-runner.chDone:
+		case scraper, ok := <-engine.chDone:
 			fury.Logger().Infof("Stopped %s", scraper)
-			runner.IncrFinishedCounter()
+			engine.IncrFinishedCounter()
 			if !ok {
 				break
 			}
 		}
-		if runner.Done() {
+		if engine.Done() {
 			break
 		}
 	}
 }
 
-func (runner *Engine) Close() {
-	close(runner.chDone)
-	close(runner.chScraped)
+func (engine *Engine) Close() {
+	close(engine.chDone)
+	close(engine.chScraped)
 }
 
-func (runner *Engine) PushScraper(scrapers ...*Scraper) *Engine {
+func (engine *Engine) PushScraper(scrapers ...*Scraper) *Engine {
 	for _, scraper := range scrapers {
 		fury.Logger().Debugf("Attaching new scraper %s", scraper)
-		scraper.runner = runner
+		scraper.engine = engine
 	}
-	runner.scrapers = append(runner.scrapers, scrapers...)
-	return runner
+	engine.scrapers = append(engine.scrapers, scrapers...)
+	return engine
 }
 
 type Scraper struct {
@@ -161,8 +162,10 @@ type Scraper struct {
 	domain       string
 	baseUrl      string
 	fetchedUrls  map[string]bool
-	runner       *Engine
+	engine       *Engine
 	extractor    *LinkExtractor
+	chDone     chan struct{}
+	chRequestUrl  chan string
 }
 
 func (scraper *Scraper) IncrCounters(isSuccessful bool) {
@@ -184,11 +187,14 @@ func (scraper *Scraper) MarkAsFetched(url string) {
 
 func (scraper *Scraper) CheckIfShouldStop() (ok bool) {
 	scraper.crawledMutex.Lock()
-	if scraper.crawled == scraper.runner.limitCrawl {
+	if scraper.crawled == scraper.engine.limitCrawl {
 		fury.Logger().Warningf("Crawl limit exceeded: %s", scraper)
 		ok = true
-	} else if scraper.failed == scraper.runner.limitFail {
+	} else if scraper.failed == scraper.engine.limitFail {
 		fury.Logger().Warningf("Fail limit exceeeded: %s", scraper)
+		ok = true
+	} else if scraper.failed == 1 && scraper.crawled == 1 {
+		fury.Logger().Warningf("Base URL is corrupted: %s", scraper)
 		ok = true
 	}
 	scraper.crawledMutex.Unlock()
@@ -218,41 +224,40 @@ func (scraper *Scraper) RunExtractor(resp *http.Response) {
 		ok, url := scraper.CheckUrl(url)
 
 		if ok {
-			scraper.Fetch(url, true)
-		}
-
-		if scraper.CheckIfShouldStop() {
-			scraper.Stop()
+			scraper.chRequestUrl <- url
 		}
 	})
 }
 
 func (scraper *Scraper) Stop() {
 	fury.Logger().Infof("Stopping %s", scraper)
-	scraper.runner.chDone <- scraper
+	scraper.chDone <- struct{}{}
+	scraper.engine.chDone <- scraper
 }
 
-func (scraper *Scraper) Start(baseUrl string) {
+func (scraper *Scraper) Start() {
 	fury.Logger().Infof("Starting: %s", scraper)
+	scraper.chRequestUrl <- scraper.baseUrl
 
-	resp, err := scraper.Fetch(baseUrl, false)
+	limiter := time.Tick(time.Millisecond * REQUEST_LIMIT_MILLISECOND)
 
-	if err != nil {
-		fury.Logger().Errorf("Base url is corrupted %s", baseUrl)
-		scraper.Stop()
-		return
+	for {
+		select {
+			case url := <-scraper.chRequestUrl:
+				<-limiter
+				go scraper.Fetch(url)
+			case <-scraper.chDone:
+				return
+		}
 	}
-
-	scraper.RunExtractor(resp)
-
 	return
 }
 
 func (scraper *Scraper) Notify(resp *http.Response) {
-	scraper.runner.chScraped <- NewResultProxy(*scraper, *resp)
+	scraper.engine.chScraped <- NewResultProxy(*scraper, *resp)
 }
 
-func (scraper *Scraper) Fetch(url string, extract bool) (resp *http.Response, err error) {
+func (scraper *Scraper) Fetch(url string) (resp *http.Response, err error) {
 	if ok := scraper.CheckIfFetched(url); ok {
 		return
 	}
@@ -266,17 +271,18 @@ func (scraper *Scraper) Fetch(url string, extract bool) (resp *http.Response, er
 	fury.Logger().Debugf("Request to %s took: %s", url, time.Since(tic))
 
 	scraper.IncrCounters(err == nil)
-	if err != nil {
+
+	if err == nil {
+		scraper.Notify(resp)
+		scraper.RunExtractor(resp)
+	} else {
 		fury.Logger().Warningf("Failed to crawl %s", url)
 		fury.Logger().Debug(err)
-		return
 	}
 
-	if extract {
-		scraper.RunExtractor(resp)
+	if scraper.CheckIfShouldStop() {
+		scraper.Stop()
 	}
-
-	scraper.Notify(resp)
 	return
 }
 
@@ -318,6 +324,8 @@ func NewScraper(sourceUrl string) (s *Scraper) {
 		crawledMutex: &sync.Mutex{},
 		fetchMutex:   &sync.Mutex{},
 		extractor:    &LinkExtractor{},
+		chDone:     make(chan struct{}),
+		chRequestUrl:  make(chan string, 1),
 	}
 	return
 }

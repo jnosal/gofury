@@ -59,8 +59,8 @@ func SimpleMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 func main() {
 	f := fury.New("localhost", 3000)
-	f.UseMiddleware(SimpleMiddleware).
-		UseMiddleware(AnotherMiddleware).
+	f.UseMiddleware(fury.RequestStatsMiddleware).
+		UseMiddleware(fury.RequestCIDMiddleware).
 		Route("/test", new(JsonResource)).
 		Route("/test2", new(StringResource)).
 		Route("/detail", new(DetailResource))

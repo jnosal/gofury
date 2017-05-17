@@ -2,7 +2,6 @@ package main
 
 import (
 	"fury"
-	"log"
 	"net/http"
 )
 
@@ -23,16 +22,19 @@ func (StringResource) Get(meta *fury.Meta) {
 	meta.String(http.StatusOK, "test")
 }
 
+type sampleError string
+
+func (e sampleError) Error() string { return "Request: " + string(e) }
+
 type DetailResource struct {
 }
 
-func (resource *DetailResource) Get(meta *fury.Meta) {
-	log.Println(meta.RequestHeaders())
-	fury.RetrieveResource(resource, meta)
+func (resource *DetailResource) Delete(meta *fury.Meta) {
+	fury.RemoveResource(resource, meta)
 }
 
-func (resource *DetailResource) Retrieve() (s string, err error) {
-	s = "DDDCC!!!!!!!!1321312333333444"
+func (resource *DetailResource) Remove() (s string, err error) {
+	s = "NOT_GENERIC"
 	return
 }
 

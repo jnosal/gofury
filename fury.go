@@ -30,6 +30,8 @@ const (
 	CONTENT_TYPE_XML  = "application/xml"
 )
 
+type MiddlewareFunc func(http.HandlerFunc) http.HandlerFunc
+
 type Renderer interface {
 	Render(code int, name string, data interface{})
 	Html(code int, html string)
@@ -136,24 +138,22 @@ type TraceMixin interface {
 }
 
 type Fury struct {
-	port           int
-	host           string
-	preMiddleware  []string
-	postMiddleware []string
+	port       int
+	host       string
+	middleware []MiddlewareFunc
 }
 
 func (fury *Fury) Route(path string, resource interface{}) *Fury {
-	http.HandleFunc(path, fury.requestHandler(resource))
+	handler := fury.requestHandler(resource)
+	for _, middleware := range fury.middleware {
+		handler = middleware(handler)
+	}
+	http.HandleFunc(path, handler)
 	return fury
 }
 
-func (fury *Fury) UsePre(middleware ...string) *Fury {
-	fury.preMiddleware = append(fury.preMiddleware, middleware...)
-	return fury
-}
-
-func (fury *Fury) UsePost(middleware ...string) *Fury {
-	fury.postMiddleware = append(fury.postMiddleware, middleware...)
+func (fury *Fury) UseMiddleware(middleware ...MiddlewareFunc) *Fury {
+	fury.middleware = append(fury.middleware, middleware...)
 	return fury
 }
 
@@ -173,8 +173,8 @@ func (fury *Fury) Abort(rw http.ResponseWriter, statusCode int) {
 	rw.WriteHeader(statusCode)
 }
 
-func (fury *Fury) requestHandler(resource interface{}) http.HandlerFunc {
-	return func(rw http.ResponseWriter, request *http.Request) {
+func (fury *Fury) requestHandler(resource interface{}) (finalHandler http.HandlerFunc) {
+	finalHandler = func(rw http.ResponseWriter, request *http.Request) {
 
 		if request.ParseForm() != nil {
 			rw.WriteHeader(http.StatusBadRequest)
@@ -230,6 +230,7 @@ func (fury *Fury) requestHandler(resource interface{}) http.HandlerFunc {
 		var meta = &Meta{writer: rw, request: request, query: request.Form, fury: fury}
 		handler(meta)
 	}
+	return
 }
 
 func New(host string, port int) *Fury {

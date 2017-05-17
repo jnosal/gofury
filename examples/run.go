@@ -3,6 +3,7 @@ package main
 import (
 	"fury"
 	"net/http"
+	"fmt"
 )
 
 type JsonResource struct {
@@ -38,9 +39,29 @@ func (resource *DetailResource) Remove() (s string, err error) {
 	return
 }
 
+
+func AnotherMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(rw http.ResponseWriter, request *http.Request) {
+		fmt.Println("Another")
+		next(rw, request)
+		fmt.Println("Another 2")
+	}
+}
+
+func SimpleMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(rw http.ResponseWriter, request *http.Request) {
+		fmt.Println("Simple")
+		next(rw, request)
+		fmt.Println("Simple 2")
+	}
+}
+
+
 func main() {
 	f := fury.New("localhost", 3000)
-	f.Route("/test", new(JsonResource)).
+	f.UseMiddleware(SimpleMiddleware).
+		UseMiddleware(AnotherMiddleware).
+		Route("/test", new(JsonResource)).
 		Route("/test2", new(StringResource)).
 		Route("/detail", new(DetailResource))
 	f.Start()

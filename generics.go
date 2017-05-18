@@ -47,6 +47,7 @@ type IDetailDestroy interface {
 	IDestroy
 }
 
+
 func RetrieveResource(i IRetrieve, meta *Meta) {
 	if result, err := i.Retrieve(); err == nil {
 		data := map[string]string{"result": result}

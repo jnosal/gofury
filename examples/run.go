@@ -4,6 +4,7 @@ import (
 	"fury"
 	"net/http"
 	"fmt"
+	"errors"
 )
 
 type JsonResource struct {
@@ -54,6 +55,16 @@ func SimpleMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		next(rw, request)
 		fmt.Println("Simple 2")
 	}
+}
+
+
+type Sample struct {
+	Name string
+}
+
+
+func (s Sample) OK() error {
+	return errors.New("Test")
 }
 
 

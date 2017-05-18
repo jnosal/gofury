@@ -32,6 +32,34 @@ const (
 
 type MiddlewareFunc func(http.HandlerFunc) http.HandlerFunc
 
+
+type Valid interface {
+	OK() error
+}
+
+
+func Validate(v interface{}) error {
+	obj, ok := v.(Valid)
+	if !ok {
+		return nil
+	}
+
+	if err := obj.OK(); err != nil {
+		return err
+	}
+	return nil
+}
+
+
+func LoadJsonAndValidate(data []byte, v interface{}) error {
+	err := json.Unmarshal(data, v)
+	if err != nil {
+		return err
+	}
+	return Validate(v)
+}
+
+
 type Renderer interface {
 	Render(code int, name string, data interface{})
 	Html(code int, html string)

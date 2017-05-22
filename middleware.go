@@ -1,7 +1,6 @@
 package fury
 
 import (
-	"github.com/jnosal/gofury"
 	"math/rand"
 	"net/http"
 	"time"
@@ -26,7 +25,7 @@ func generateCID() string {
 func RequestCIDMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(rw http.ResponseWriter, request *http.Request) {
 		cid := generateCID()
-		fury.Logger().Debug(cid)
+		Logger().Debug(cid)
 		request.Header.Set(CID_HEADER, cid)
 		next(rw, request)
 	}
@@ -38,13 +37,13 @@ func RequestStatsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		path := url.Path
 		qs := url.RawQuery
 
-		fury.Logger().Debug("---------***----------")
-		fury.Logger().Debug("REMOTE ADDR: %s", request.RemoteAddr)
-		fury.Logger().Debugf("URL: %s, Method: %s", url, request.Method)
-		fury.Logger().Debugf("PATH: %s", path)
-		fury.Logger().Debugf("QUERY: %s", qs)
-		fury.Logger().Debugf("User Agent: %s", request.UserAgent())
-		fury.Logger().Debug("---------***----------")
+		Logger().Debug("---------***----------")
+		Logger().Debug("REMOTE ADDR: %s", request.RemoteAddr)
+		Logger().Debugf("URL: %s, Method: %s", url, request.Method)
+		Logger().Debugf("PATH: %s", path)
+		Logger().Debugf("QUERY: %s", qs)
+		Logger().Debugf("User Agent: %s", request.UserAgent())
+		Logger().Debug("---------***----------")
 
 		next(rw, request)
 	}

@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"io/ioutil"
 )
 
 const (
@@ -53,11 +54,17 @@ func Validate(v interface{}) error {
 	return nil
 }
 
-func LoadJsonAndValidate(data []byte, v interface{}) error {
-	err := json.Unmarshal(data, v)
+func LoadAndValidateJson(meta *Meta, v interface{}) error {
+	data, err := ioutil.ReadAll(meta.Request().Body)
 	if err != nil {
 		return err
 	}
+
+	err = json.Unmarshal(data, v)
+	if err != nil {
+		return err
+	}
+
 	return Validate(v)
 }
 

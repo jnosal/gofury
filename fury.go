@@ -78,6 +78,11 @@ type Meta struct {
 	fury    *Fury
 }
 
+
+func (m *Meta) App() *Fury {
+	return m.fury
+}
+
 func (m *Meta) RequestHeaders() http.Header {
 	return m.request.Header
 }
@@ -169,6 +174,16 @@ type Fury struct {
 	port       int
 	host       string
 	middleware []MiddlewareFunc
+	registry   map[string]interface{}
+}
+
+func (fury *Fury) FromRegistry(key string) interface{} {
+	return fury.registry[key]
+}
+
+func (fury *Fury) ToRegistry(key string, value interface{}) *Fury {
+	fury.registry[key] = value
+	return fury
 }
 
 func (fury *Fury) Route(path string, resource interface{}) *Fury {
@@ -262,5 +277,9 @@ func (fury *Fury) requestHandler(resource interface{}) (finalHandler http.Handle
 }
 
 func New(host string, port int) *Fury {
-	return &Fury{host: host, port: port}
+	return &Fury{
+		host: host,
+		port: port,
+		registry: make(map[string]interface{}),
+	}
 }

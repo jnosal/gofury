@@ -4,8 +4,12 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -31,12 +35,11 @@ const (
 )
 
 type MiddlewareFunc func(http.HandlerFunc) http.HandlerFunc
-
+type CleanupFunc func(fury *Fury)
 
 type Valid interface {
 	OK() error
 }
-
 
 func Validate(v interface{}) error {
 	obj, ok := v.(Valid)
@@ -50,7 +53,6 @@ func Validate(v interface{}) error {
 	return nil
 }
 
-
 func LoadJsonAndValidate(data []byte, v interface{}) error {
 	err := json.Unmarshal(data, v)
 	if err != nil {
@@ -58,7 +60,6 @@ func LoadJsonAndValidate(data []byte, v interface{}) error {
 	}
 	return Validate(v)
 }
-
 
 type Renderer interface {
 	Render(code int, name string, data interface{})
@@ -77,7 +78,6 @@ type Meta struct {
 	query   url.Values
 	fury    *Fury
 }
-
 
 func (m *Meta) App() *Fury {
 	return m.fury
@@ -171,10 +171,11 @@ type TraceMixin interface {
 }
 
 type Fury struct {
-	port       int
-	host       string
-	middleware []MiddlewareFunc
-	registry   map[string]interface{}
+	port             int
+	host             string
+	cleanupFunctions []CleanupFunc
+	middleware       []MiddlewareFunc
+	registry         map[string]interface{}
 }
 
 func (fury *Fury) FromRegistry(key string) interface{} {
@@ -195,21 +196,47 @@ func (fury *Fury) Route(path string, resource interface{}) *Fury {
 	return fury
 }
 
+func (fury *Fury) RegisterCleanup(fun ...CleanupFunc) *Fury {
+	fury.cleanupFunctions = append(fury.cleanupFunctions, fun...)
+	return fury
+}
+
 func (fury *Fury) UseMiddleware(middleware ...MiddlewareFunc) *Fury {
 	fury.middleware = append(fury.middleware, middleware...)
 	return fury
 }
 
 func (fury *Fury) Start() {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
 	address := fmt.Sprintf("%s:%d", fury.host, fury.port)
-	Logger().Infof("STARTING FURY at %s", address)
+
 	server := &http.Server{
 		Addr:           address,
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
-	Logger().Error(server.ListenAndServe())
+
+	listener, err := net.Listen("tcp", server.Addr)
+	if err != nil {
+		Logger().Error(err)
+		os.Exit(3)
+	}
+
+	go func() {
+		<-sigs
+		Logger().Infof("STOPPING FURY at %s", address)
+		listener.Close()
+
+		for _, cleanupFun := range fury.cleanupFunctions {
+			cleanupFun(fury)
+		}
+	}()
+
+	Logger().Infof("STARTING FURY at %s", address)
+	server.Serve(listener)
 }
 
 func (fury *Fury) Abort(rw http.ResponseWriter, statusCode int) {
@@ -278,8 +305,8 @@ func (fury *Fury) requestHandler(resource interface{}) (finalHandler http.Handle
 
 func New(host string, port int) *Fury {
 	return &Fury{
-		host: host,
-		port: port,
+		host:     host,
+		port:     port,
 		registry: make(map[string]interface{}),
 	}
 }

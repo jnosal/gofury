@@ -71,6 +71,9 @@ func (s Sample) OK() error {
 func main() {
 	f := fury.New("localhost", 3000)
 	f.UseMiddleware(fury.RequestStatsMiddleware).
+		RegisterCleanup(func(f *fury.Fury) {
+			fmt.Println(f)
+		}).
 		UseMiddleware(fury.RequestCIDMiddleware).
 		Route("/test", new(JsonResource)).
 		Route("/test2", new(StringResource)).

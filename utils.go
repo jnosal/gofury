@@ -8,7 +8,6 @@ const (
 
 type RetriableFunc func(attempt int) (retry bool, err error)
 
-
 func Retry(fn RetriableFunc) error {
 	var err error
 	var cont bool

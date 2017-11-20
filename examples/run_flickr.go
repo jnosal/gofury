@@ -1,20 +1,18 @@
 package main
 
 import (
-	"fury"
 	"flag"
 	"fmt"
-	"net/http"
+	"fury"
 	"io/ioutil"
+	"net/http"
 )
 
-
 type FlickrConfig struct {
-	ApiKey string
+	ApiKey    string
 	ApiSecret string
-	BaseUrl string
+	BaseUrl   string
 }
-
 
 type FlickrClient struct {
 	config *FlickrConfig
@@ -38,18 +36,16 @@ func (client FlickrClient) String() (s string) {
 
 func NewConfig(key string, secret string) *FlickrConfig {
 	return &FlickrConfig{
-		ApiKey: key,
+		ApiKey:    key,
 		ApiSecret: secret,
-		BaseUrl: "https://api.flickr.com/services/rest/",
+		BaseUrl:   "https://api.flickr.com/services/rest/",
 	}
 }
-
 
 func (config FlickrConfig) String() (s string) {
 	s = fmt.Sprintf("Flickr Config. Key: %s Secret: %s", config.ApiKey, config.ApiSecret)
 	return
 }
-
 
 type SearchResource struct {
 }
@@ -60,7 +56,6 @@ func (resource *SearchResource) Get(meta *fury.Meta) {
 	//data := map[string]string{"hello": "world"}
 	meta.Json(http.StatusOK, nil)
 }
-
 
 func main() {
 	key := flag.String("api-key", "", "Flickr API KEY")

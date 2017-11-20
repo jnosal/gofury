@@ -1,10 +1,10 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"fury"
 	"net/http"
-	"fmt"
-	"errors"
 )
 
 type JsonResource struct {
@@ -40,7 +40,6 @@ func (resource *DetailResource) Remove() (s string, err error) {
 	return
 }
 
-
 func AnotherMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(rw http.ResponseWriter, request *http.Request) {
 		fmt.Println("Another")
@@ -57,16 +56,13 @@ func SimpleMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-
 type Sample struct {
 	Name string
 }
 
-
 func (s Sample) OK() error {
 	return errors.New("Test")
 }
-
 
 func main() {
 	f := fury.New("localhost", 3000)

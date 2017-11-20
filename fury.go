@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -11,7 +12,6 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"io/ioutil"
 )
 
 const (
@@ -92,6 +92,10 @@ func (m *Meta) App() *Fury {
 
 func (m *Meta) RequestHeaders() http.Header {
 	return m.request.Header
+}
+
+func (m *Meta) Query() {
+	return m.query
 }
 
 func (m *Meta) Request() *http.Request {

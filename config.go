@@ -2,11 +2,10 @@ package fury
 
 import (
 	"encoding/json"
-	"strings"
 	yaml "gopkg.in/yaml.v2"
 	"io/ioutil"
+	"strings"
 )
-
 
 func ProcessFile(config interface{}, file string) error {
 	data, err := ioutil.ReadFile(file)

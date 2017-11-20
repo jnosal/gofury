@@ -94,7 +94,7 @@ func (m *Meta) RequestHeaders() http.Header {
 	return m.request.Header
 }
 
-func (m *Meta) Query() {
+func (m *Meta) Query() url.Values {
 	return m.query
 }
 

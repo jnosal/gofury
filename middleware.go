@@ -38,7 +38,7 @@ func RequestStatsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		qs := url.RawQuery
 
 		Logger().Debug("---------***----------")
-		Logger().Debug("REMOTE ADDR: %s", request.RemoteAddr)
+		Logger().Debugf("REMOTE ADDR: %s", request.RemoteAddr)
 		Logger().Debugf("URL: %s, Method: %s", url, request.Method)
 		Logger().Debugf("PATH: %s", path)
 		Logger().Debugf("QUERY: %s", qs)
